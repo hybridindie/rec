@@ -2,16 +2,21 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 )
 
 func launchCommand(p Paths, m Manifest, runtimeDir, model string, port int) (string, []string, []string) {
-	return filepath.Join(runtimeDir, runtimeServer), []string{
+	args := []string{
 		"serve", m.Model, "--model-dir", filepath.Dir(model), "--manifest", model,
 		"--port", strconv.Itoa(port), "--context-limit", strconv.Itoa(m.Context),
 		"--api-key-file", filepath.Join(p.Config, "api-key"),
-	}, []string{"HF_HUB_OFFLINE=1", "TOKENIZERS_PARALLELISM=false"}
+	}
+	// REC_ENGINE_ARGS passes extra engine flags through, e.g. "--metrics /path.jsonl".
+	args = append(args, strings.Fields(os.Getenv("REC_ENGINE_ARGS"))...)
+	return filepath.Join(runtimeDir, runtimeServer), args, []string{"HF_HUB_OFFLINE=1", "TOKENIZERS_PARALLELISM=false"}
 }
 
 func checkAppleChip(name string) error {
