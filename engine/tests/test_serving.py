@@ -47,6 +47,7 @@ class Engine:
         self.constraint = SimpleNamespace(stops=(0,))
         self.constraints = SimpleNamespace(tools=Mock(return_value=self.constraint))
         self.grammars = []
+        self.budgets = []
 
     def prepare_prefix(self, *, should_stop):
         return None
@@ -54,9 +55,19 @@ class Engine:
     def prompt(self, messages, tools=None):
         return [ord(c) for c in messages[-1]["content"]]
 
-    def generate_tokens(self, ids, sampling, *, should_stop, return_logprobs=False, grammar=None):
+    def generate_tokens(
+        self,
+        ids,
+        sampling,
+        *,
+        should_stop,
+        return_logprobs=False,
+        grammar=None,
+        reasoning_budget=None,
+    ):
         self.calls.append((chr(ids[0]), sampling.max_tokens))
         self.grammars.append(grammar)
+        self.budgets.append(reasoning_budget)
         self.active += 1
         self.max_active = max(self.max_active, self.active)
         generated = 0
@@ -137,12 +148,36 @@ class ServingTest(unittest.TestCase):
         self.assertEqual(self.request("B", grammar="json")[0], 400)
         self.assertEqual(self.engine.calls, [])
 
+    def test_reasoning_effort_maps_to_a_reasoning_budget(self):
+        for effort, budget in (("none", 0), ("minimal", 0), ("low", 2048), ("medium", 8192)):
+            self.assertEqual(self.request("B", max_tokens=1, reasoning_effort=effort)[0], 200)
+            self.assertEqual(self.engine.budgets[-1], budget)
+        self.assertEqual(self.request("B", max_tokens=1, reasoning_effort="high")[0], 200)
+        self.assertIsNone(self.engine.budgets[-1])
+        self.assertEqual(self.request("B", max_tokens=1)[0], 200)
+        self.assertIsNone(self.engine.budgets[-1])
+
+    def test_explicit_reasoning_budget_wins_over_effort(self):
+        status = self.request("B", max_tokens=1, reasoning_effort="low", reasoning_budget=100)[0]
+        self.assertEqual(status, 200)
+        self.assertEqual(self.engine.budgets[-1], 100)
+
+    def test_invalid_reasoning_controls_are_rejected(self):
+        for fields in (
+            {"reasoning_effort": "extreme"},
+            {"reasoning_budget": -1},
+            {"reasoning_budget": True},
+            {"reasoning_budget": "100"},
+            {"reasoning_budget": 100, "grammar": "none"},
+        ):
+            self.assertEqual(self.request("B", max_tokens=1, **fields)[0], 400, fields)
+        self.assertEqual(self.engine.calls, [])
+
     def test_unknown_fields_are_ignored_with_one_warning_each(self):
         fields = {
             "chat_template": "other",
             "chat_template_kwargs": {},
             "input_ids": [ord("C")],
-            "reasoning_effort": "high",
             "top_logprobs": 3,
             "xtc_probability": 0,
             "logit_bias": "x",

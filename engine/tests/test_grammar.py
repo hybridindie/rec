@@ -241,6 +241,33 @@ class GrammarTests(unittest.TestCase):
             with self.subTest(text=text):
                 self.assertFalse(self.accepts(constraint, text))
 
+    def allowed(self, mask):
+        return set(np.flatnonzero(np.unpackbits(mask.view(np.uint8), bitorder="little")).tolist())
+
+    def test_reasoning_budget_forces_think_end(self):
+        think, end = self.tokenizer.convert_tokens_to_ids(["<think>", "</think>"])
+        word = self.tokenizer.encode("a", add_special_tokens=False)[0]
+        with self.compiler.tools().session(reasoning_budget=2) as session:
+            session._advance(think, True)
+            self.assertGreater(len(self.allowed(session._advance(word, True))), 1)
+            self.assertEqual(self.allowed(session._advance(word, True)), {end})
+            after = self.allowed(session._advance(end, True))
+            self.assertGreater(len(after), 1)
+            self.assertEqual(session.metrics()["reasoning_tokens"], 2)
+
+    def test_zero_reasoning_budget_closes_think_immediately(self):
+        think, end = self.tokenizer.convert_tokens_to_ids(["<think>", "</think>"])
+        with self.compiler.tools().session(reasoning_budget=0) as session:
+            self.assertEqual(self.allowed(session._advance(think, True)), {end})
+
+    def test_no_budget_leaves_reasoning_unbounded(self):
+        think = self.tokenizer.convert_tokens_to_ids("<think>")
+        word = self.tokenizer.encode("a", add_special_tokens=False)[0]
+        with self.compiler.tools().session() as session:
+            session._advance(think, True)
+            for _ in range(5):
+                self.assertGreater(len(self.allowed(session._advance(word, True))), 1)
+
     def test_tools_require_object_schemas(self):
         for enforce in (False, True):
             compiler = ConstraintCompiler(self.tokenizer, enforce_tool_schemas=enforce)
