@@ -16,9 +16,12 @@ WORDS = VOCAB // 32
 class Constraint:
     compiled: object
     stops: tuple[int, ...]
+    # Reasoning delimiters; a reasoning budget needs both.
+    think: int | None = None
+    think_end: int | None = None
 
-    def session(self):
-        return ConstraintSession(self)
+    def session(self, reasoning_budget=None):
+        return ConstraintSession(self, reasoning_budget)
 
 
 class ConstraintCompiler:
@@ -39,13 +42,27 @@ class ConstraintCompiler:
             self.tokenizer.convert_tokens_to_ids(x)
             for x in ("<|end_of_text|>", "<|user|>", "<|observation|>")
         )
-        return Constraint(compiled, stops)
+        think, think_end = self.tokenizer.convert_tokens_to_ids(["<think>", "</think>"])
+        return Constraint(compiled, stops, think, think_end)
 
 
 class ConstraintSession:
-    def __init__(self, constraint):
+    def __init__(self, constraint, reasoning_budget=None):
         self.constraint = constraint
         self.stops = constraint.stops
+        # Reasoning budget: once the open <think> block holds this many tokens, the
+        # only allowed token is </think>, so the model moves on to its answer. A
+        # budget of 0 yields <think></think>, the GLM no-thinking form.
+        if reasoning_budget is not None and (
+            constraint.think is None or constraint.think_end is None
+        ):
+            raise ValueError("A reasoning budget needs a grammar with reasoning delimiters")
+        self.reasoning_budget = reasoning_budget
+        self.reasoning = None
+        self.reasoning_tokens = 0
+        if reasoning_budget is not None:
+            self.think_end_mask = np.zeros(WORDS, np.uint32)
+            self.think_end_mask[constraint.think_end >> 5] = 1 << (constraint.think_end & 31)
         self.matcher = xgr.GrammarMatcher(constraint.compiled)
         self.bitmask = xgr.allocate_token_bitmask(1, VOCAB)
         self.numpy_mask = self.bitmask.numpy().view(np.uint32).reshape(-1)
@@ -74,7 +91,18 @@ class ConstraintSession:
         if token in self.stops:
             self.stopped = True
             return self.full_mask
-        return self._fill()
+        if token == self.constraint.think:
+            self.reasoning = 0
+        elif token == self.constraint.think_end:
+            self.reasoning = None
+        elif self.reasoning is not None:
+            self.reasoning += 1
+            self.reasoning_tokens += 1
+        mask = self._fill()
+        if self.reasoning is not None and self.reasoning_budget is not None:
+            if self.reasoning >= self.reasoning_budget:
+                return self.think_end_mask
+        return mask
 
     def first_logits(self, logits):
         words = mx.arange(VOCAB, dtype=mx.uint32)
@@ -91,6 +119,8 @@ class ConstraintSession:
 
     def metrics(self):
         return {
+            "reasoning_tokens": self.reasoning_tokens,
+            "reasoning_budget": self.reasoning_budget,
             "grammar_accepted_tokens": self.accepted,
             "grammar_mask_seconds": sum(self.mask_seconds),
             "grammar_max_mask_seconds": max(self.mask_seconds),

@@ -17,6 +17,25 @@ from .anthropic import (
 )
 from .engine import Sampling
 
+# OpenAI-style reasoning_effort as a cap on reasoning tokens; "high" leaves Flint to
+# decide its own length, as it does without the field.
+REASONING_EFFORT_BUDGETS = {"none": 0, "minimal": 0, "low": 2048, "medium": 8192, "high": None}
+
+
+def reasoning_budget(body):
+    """The request's reasoning-token cap: reasoning_budget wins over reasoning_effort."""
+    if "reasoning_budget" in body:
+        budget = body["reasoning_budget"]
+        if type(budget) is not int or budget < 0:
+            raise ValueError("reasoning_budget must be a nonnegative integer")
+        return budget
+    effort = body.get("reasoning_effort")
+    if effort is None:
+        return None
+    if effort not in REASONING_EFFORT_BUDGETS:
+        raise ValueError("reasoning_effort must be none, minimal, low, medium or high")
+    return REASONING_EFFORT_BUDGETS[effort]
+
 
 class RequestError(ValueError):
     pass
@@ -204,6 +223,8 @@ def make_server(
                 "store",
                 "grammar",
                 "parallel_tool_calls",
+                "reasoning_effort",
+                "reasoning_budget",
             }
             unknown = set(self.body) - allowed
             for field in unknown:
@@ -264,6 +285,9 @@ def make_server(
                 raise ValueError("parallel_tool_calls must be a boolean")
             if self.body.get("parallel_tool_calls") is False:
                 raise ValueError("parallel_tool_calls=false is not supported")
+            self.reasoning_budget = reasoning_budget(self.body)
+            if self.reasoning_budget is not None and mode != "flint":
+                raise ValueError("A reasoning budget requires the Flint grammar")
             messages = self.body["messages"]
             if not isinstance(messages, list) or not messages:
                 raise ValueError("messages must be a nonempty list")
@@ -287,6 +311,7 @@ def make_server(
                 process_message_content(request.messages)
                 mode = self.body["grammar"] if "grammar" in self.body else grammar_mode
                 request.constraint = None
+                request.reasoning_budget = self.reasoning_budget
                 if mode == "flint":
                     try:
                         request.constraint = engine.constraints.tools(request.tools)

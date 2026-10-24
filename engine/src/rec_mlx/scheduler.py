@@ -166,6 +166,8 @@ class Generator(ResponseGenerator):
         options = {}
         if request.constraint is not None:
             options["grammar"] = request.constraint
+        if getattr(request, "reasoning_budget", None) is not None:
+            options["reasoning_budget"] = request.reasoning_budget
         if args.logprobs:
             options["return_logprobs"] = True
         raw = self.engine.generate_tokens(

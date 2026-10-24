@@ -149,13 +149,21 @@ class Engine:
         should_stop=lambda: False,
         grammar=None,
         return_logprobs=False,
+        reasoning_budget=None,
     ):
+        if reasoning_budget is not None and grammar is None:
+            raise ValueError("A reasoning budget requires a grammar constraint")
         # Metal streams are thread-local; HTTP handlers run outside the model-loading thread.
         with self.mx.stream(self.mx.new_stream(self.mx.gpu)):
             from .prefix import PrefillCancelled
 
             try:
-                with grammar.session() if grammar is not None else nullcontext(None) as constraint:
+                session = (
+                    grammar.session(reasoning_budget=reasoning_budget)
+                    if grammar is not None
+                    else nullcontext(None)
+                )
+                with session as constraint:
                     yield from self._generate_tokens(
                         ids,
                         sampling,
