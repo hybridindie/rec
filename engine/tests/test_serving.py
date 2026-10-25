@@ -517,3 +517,52 @@ class ServingTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PromptIdMetricsTest(unittest.TestCase):
+    def serve(self, **options):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        engine = Engine()
+        path = Path(temp.name) / "metrics"
+        server = make_server(engine, ("127.0.0.1", 0), path, **options)
+        thread = threading.Thread(target=server.serve_forever)
+        thread.start()
+
+        def stop():
+            server.generator.cancel()
+            server.shutdown()
+            server.generator.join()
+            server.server_close()
+            thread.join()
+
+        self.addCleanup(stop)
+        return server, path
+
+    def send(self, server, message):
+        conn = http.client.HTTPConnection(*server.server_address, timeout=5)
+        try:
+            body = {"model": "flint", "messages": [{"role": "user", "content": message}]}
+            conn.request("POST", "/v1/chat/completions", json.dumps(body | {"max_tokens": 2}))
+            self.assertEqual(conn.getresponse().status, 200)
+        finally:
+            conn.close()
+
+    def rows(self, path):
+        return [json.loads(line) for line in path.read_text().splitlines()]
+
+    def test_prompt_ids_are_logged_as_a_delta_on_the_previous_prompt(self):
+        server, path = self.serve(metrics_prompt_ids=True)
+        for message in ("hello there", "hello world", "bye"):
+            self.send(server, message)
+        rows = self.rows(path)
+        self.assertEqual([r["prompt_ids_base"] for r in rows], [0, 6, 0])
+        prompt = []
+        for row, message in zip(rows, ("hello there", "hello world", "bye"), strict=True):
+            prompt = prompt[: row["prompt_ids_base"]] + row["prompt_ids_tail"]
+            self.assertEqual(prompt, [ord(c) for c in message])
+
+    def test_prompt_ids_are_not_logged_by_default(self):
+        server, path = self.serve()
+        self.send(server, "hello")
+        self.assertNotIn("prompt_ids_tail", self.rows(path)[0])

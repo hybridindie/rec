@@ -60,6 +60,11 @@ def main():
         help="append per-request metrics to this JSONL file (default: disabled)",
     )
     parser.add_argument(
+        "--metrics-prompt-ids",
+        action="store_true",
+        help="also log prompt token ids, as a delta on the previous prompt (needs --metrics)",
+    )
+    parser.add_argument(
         "--temperature",
         type=float,
         default=1.0,
@@ -97,6 +102,8 @@ def main():
         )
     except ValueError as error:
         parser.error(str(error))
+    if args.metrics_prompt_ids and args.metrics is None:
+        parser.error("--metrics-prompt-ids requires --metrics")
     api_key = None
     if args.api_key_file is not None:
         api_key = args.api_key_file.read_text().strip()
@@ -135,6 +142,7 @@ def main():
             defaults=settings,
             api_key=api_key,
             grammar_mode=args.grammar,
+            metrics_prompt_ids=args.metrics_prompt_ids,
         )
         print(f"Listening on http://127.0.0.1:{server.server_port}/v1", flush=True)
 

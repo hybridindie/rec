@@ -42,7 +42,14 @@ class RequestError(ValueError):
 
 
 def make_server(
-    engine, address, metrics_path, *, defaults=Sampling(), api_key=None, grammar_mode="flint"
+    engine,
+    address,
+    metrics_path,
+    *,
+    defaults=Sampling(),
+    api_key=None,
+    grammar_mode="flint",
+    metrics_prompt_ids=False,
 ):
     from mlx_lm.server import APIHandler
 
@@ -361,6 +368,6 @@ def make_server(
                     request.generation_context.stop()
 
     server = ThreadingHTTPServer(address, Handler)
-    generator = Generator(engine, metrics_path, defaults)
+    generator = Generator(engine, metrics_path, defaults, prompt_ids=metrics_prompt_ids)
     server.generator = generator
     return server

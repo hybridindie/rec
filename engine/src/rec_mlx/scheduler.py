@@ -33,10 +33,12 @@ class ModelProvider:
 
 
 class Generator(ResponseGenerator):
-    def __init__(self, engine, metrics_path, defaults):
+    def __init__(self, engine, metrics_path, defaults, *, prompt_ids=False):
         self.engine = engine
         self.metrics_path = metrics_path
         self.defaults = defaults
+        self.prompt_ids = prompt_ids
+        self._logged_prompt = []
         self.tokenizer = TokenizerWrapper(
             engine.tokenizer,
             NaiveStreamingDetokenizer,
@@ -192,6 +194,7 @@ class Generator(ResponseGenerator):
                         sampling,
                         "cancelled" if cancelled() else "complete",
                         event["metrics"],
+                        ctx.prompt,
                     )
                     complete = True
                     break
@@ -222,9 +225,10 @@ class Generator(ResponseGenerator):
                         "generated_tokens": len(tokens),
                         "token_ids": tokens,
                     },
+                    ctx.prompt,
                 )
 
-    def record(self, sampling, status, metrics):
+    def record(self, sampling, status, metrics, prompt):
         if self.metrics_path is None:
             return
         row = {
@@ -234,5 +238,15 @@ class Generator(ResponseGenerator):
             "status": status,
             **metrics,
         }
+        if self.prompt_ids:
+            # Rebuild prompt i as prompt[i-1][:prompt_ids_base] + prompt_ids_tail.
+            base = 0
+            for previous, current in zip(self._logged_prompt, prompt):
+                if previous != current:
+                    break
+                base += 1
+            row["prompt_ids_base"] = base
+            row["prompt_ids_tail"] = list(prompt[base:])
+            self._logged_prompt = list(prompt)
         with self.metrics_path.open("a") as output:
             output.write(json.dumps(row) + "\n")
