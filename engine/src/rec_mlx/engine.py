@@ -45,7 +45,17 @@ class Sampling:
             raise ValueError("seed plus max_tokens must fit in unsigned 64-bit random keys")
 
 
+# Rolling a cached conversation back by at least this many tokens means the new prompt
+# only shares its head (a subagent, another harness role). With spare slots, copy that
+# head instead, so the conversation survives for its next turn.
+CLONE_MIN_DISCARD = 8192
+
+
 class Engine:
+    prompt_cache_slots = 1
+    prompt_cache_source = None
+    _idle_caches = ()
+
     def __init__(
         self,
         directory: Path,
@@ -53,6 +63,7 @@ class Engine:
         *,
         context_limit: int,
         enforce_tool_schemas: bool = False,
+        prompt_cache_slots: int = 1,
     ):
         if platform.system() != "Darwin" or platform.machine() != "arm64":
             raise RuntimeError("Flint requires an Apple Silicon Mac")
@@ -73,7 +84,11 @@ class Engine:
         if not 1 <= context_limit <= QATModel.context_limit:
             raise ValueError(f"Context limit must be between 1 and {QATModel.context_limit} tokens")
         self.context_limit = context_limit
+        if prompt_cache_slots < 1:
+            raise ValueError("prompt_cache_slots must be at least 1")
+        self.prompt_cache_slots = prompt_cache_slots
         self._prompt_cache = None
+        self._idle_caches = []
         self._prefix_preparation = None
         self.mx = mx
         self.tokenizer = load_tokenizer(directory)
@@ -219,7 +234,36 @@ class Engine:
                 prepared, _ = select_prefix(prepared, ids)
             if prepared is not None and len(prepared.tokens) > len(pending.origin.tokens):
                 prefix = prepared
-        return prefix
+        if self.prompt_cache_slots == 1:
+            self.prompt_cache_source = "current" if prefix is not None else "none"
+            return prefix
+        return self._choose_prefix(prefix, ids)
+
+    def _choose_prefix(self, current, ids):
+        """Pick the cached conversation that reuses most of ids; park the others."""
+        from . import prefix as prefixes
+
+        candidates = ([] if current is None else [current]) + self._idle_caches[::-1]
+        best, usable = None, 0
+        for candidate in candidates:  # most recent first, so it wins ties
+            reused = prefixes.usable_prefix(candidate, ids)
+            if reused > usable:
+                best, usable = candidate, reused
+        parked = [candidate for candidate in candidates if candidate is not best]
+        if best is None:
+            self.prompt_cache_source = "none"
+        elif len(best.tokens) - usable >= CLONE_MIN_DISCARD:
+            parked.insert(0, best)
+            best = prefixes.clone_prefix(best, usable)
+            self.prompt_cache_source = "clone"
+        else:
+            self.prompt_cache_source = "current" if best is current else "idle"
+        self._idle_caches = parked[: self.prompt_cache_slots - 1][::-1]
+        return best
+
+    @property
+    def idle_prompt_cache_bytes(self):
+        return sum(cache.storage.nbytes + cache.checkpoint_bytes for cache in self._idle_caches)
 
     def _generate_tokens(self, ids, sampling, *, should_stop, grammar=None, return_logprobs=False):
         if len(ids) + sampling.max_tokens > self.context_limit:
@@ -350,6 +394,9 @@ class Engine:
                     "cached_prompt_tokens": session.cached_tokens,
                     "common_prefix_tokens": session.common_prefix_tokens,
                     "prefix_checkpoint_bytes": self._prompt_cache.checkpoint_bytes,
+                    "prompt_cache_source": self.prompt_cache_source,
+                    "idle_prompt_caches": len(self._idle_caches),
+                    "idle_prompt_cache_bytes": self.idle_prompt_cache_bytes,
                     "prefilled_tokens": len(ids) - session.cached_tokens,
                     "prompt_cache_bytes": session._state["kv"].nbytes
                     + sliding_bytes

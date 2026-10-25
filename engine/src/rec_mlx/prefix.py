@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 
 import mlx.core as mx
 
-from .cache import FixedSlidingKVCache, copy_array
+from .cache import FixedKVCache, FixedSlidingKVCache, KVStorage, copy_array
 
 
 class PrefillCancelled(Exception):
@@ -116,3 +116,63 @@ def select_prefix(prefix, tokens):
         len(tokens) - cached,
     )
     return prefix, common
+
+
+def usable_prefix(prefix, tokens):
+    """How many cached tokens select_prefix would reuse for tokens, without changing prefix."""
+    if prefix is None:
+        return 0
+    common = 0
+    for previous, current in zip(prefix.tokens, tokens):
+        if previous != current:
+            break
+        common += 1
+    if common == len(prefix.tokens):
+        return common
+    return next(
+        (item.position for item in reversed(prefix.checkpoints) if item.position <= common), 0
+    )
+
+
+def clone_prefix(prefix, position):
+    """The first position tokens of prefix in new storage, leaving prefix untouched.
+
+    position must be len(prefix.tokens) or one of its checkpoints. The clone has no
+    checkpoints of its own: sharing checkpoint arrays would let one cache's prefill write
+    into the other's sliding buffers.
+    """
+    if position == len(prefix.tokens):
+        sliding = [
+            (
+                layer.key_buffers[layer._slot],
+                layer.value_buffers[layer._slot],
+                layer._valid,
+                layer._ring_index,
+            )
+            for layer in prefix.layers
+            if isinstance(layer, FixedSlidingKVCache)
+        ]
+        logits = prefix.logits
+    else:
+        checkpoint = next(item for item in prefix.checkpoints if item.position == position)
+        sliding, logits = checkpoint.sliding, checkpoint.logits
+    storage = KVStorage(prefix.storage.rows, position)
+    rings = iter(sliding)
+    layers = []
+    for layer in prefix.layers:
+        if isinstance(layer, FixedKVCache):
+            data = prefix.storage.layer(layer.index, position)
+            storage.write(layer.index, 0, data[0:1], data[1:2])
+            clone = FixedKVCache(storage, layer.index)
+        else:
+            keys, values, valid, ring = next(rings)
+            clone = copy.copy(layer)
+            keys, values = copy_array(keys), copy_array(values)
+            clone.key_buffers = (keys, mx.zeros_like(keys))
+            clone.value_buffers = (values, mx.zeros_like(values))
+            clone.capacity = keys.shape[-2]
+            clone._slot, clone._valid, clone._ring_index = 0, valid, ring
+        clone.offset = position
+        layers.append(clone)
+    mx.eval([layer.state for layer in layers])
+    return PromptCache(prefix.tokens[:position], layers, logits, storage)
