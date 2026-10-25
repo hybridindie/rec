@@ -13,6 +13,7 @@ from .chat import load_tokenizer, normalize_messages
 from .checkpoint import validate
 from .detokenize import StreamingText
 from .kernels.device import profile_for_device
+from .repetition import RepetitionGuard
 
 
 class ContextLimitError(ValueError):
@@ -46,6 +47,8 @@ class Sampling:
 
 
 class Engine:
+    repetition_guard = False
+
     def __init__(
         self,
         directory: Path,
@@ -53,6 +56,7 @@ class Engine:
         *,
         context_limit: int,
         enforce_tool_schemas: bool = False,
+        repetition_guard: bool = False,
     ):
         if platform.system() != "Darwin" or platform.machine() != "arm64":
             raise RuntimeError("Flint requires an Apple Silicon Mac")
@@ -79,6 +83,7 @@ class Engine:
         self.tokenizer = load_tokenizer(directory)
         self._constraints = None
         self.enforce_tool_schemas = enforce_tool_schemas
+        self.repetition_guard = repetition_guard
         self._constraints_lock = threading.Lock()
         self.eos = set(config["eos_token_id"])
         if not self.eos:
@@ -241,6 +246,7 @@ class Engine:
         stops = self.eos if grammar is None else set(grammar.stops)
         generated = []
         token_logprobs = []
+        guard = RepetitionGuard() if self.repetition_guard else None
         start = time.perf_counter()
         reason = "length"
         try:
@@ -325,14 +331,19 @@ class Engine:
                     yield {"token": token, "text": delta, "finish_reason": reason, **details}
                     break
                 delta = text_stream.add_token(token)
-                if index + 1 == sampling.max_tokens:
+                # A looping generation ends as if it ran out of tokens: the output is truncated.
+                looping = guard is not None and guard.add(token)
+                last = looping or index + 1 == sampling.max_tokens
+                if last:
                     delta += text_stream.finish(generated)
                 yield {
                     "token": token,
                     "text": delta,
-                    "finish_reason": "length" if index + 1 == sampling.max_tokens else None,
+                    "finish_reason": "length" if last else None,
                     **details,
                 }
+                if looping:
+                    break
             mx.synchronize()
             end = time.perf_counter()
             decode_seconds = end - first if first is not None else 0.0
@@ -379,6 +390,11 @@ class Engine:
                     "computed_tokens": computed_tokens,
                     "decode_strategy": "resident_sampling",
                     **(grammar.metrics() if grammar is not None else {}),
+                    **(
+                        {"repetition_stopped": {"period": guard.period}}
+                        if guard is not None and guard.period is not None
+                        else {}
+                    ),
                 },
             }
         finally:

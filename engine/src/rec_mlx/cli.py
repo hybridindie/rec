@@ -47,6 +47,11 @@ def main():
         help="with Flint grammar, also constrain strict:false tool arguments",
     )
     parser.add_argument(
+        "--repetition-guard",
+        action="store_true",
+        help="end a generation that is repeating the same tokens exactly (reported as length)",
+    )
+    parser.add_argument(
         "--api-key-file", type=Path, help="file with the bearer token that requests must present"
     )
     parser.add_argument(
@@ -102,6 +107,7 @@ def main():
         args.manifest,
         context_limit=args.context_limit,
         enforce_tool_schemas=args.enforce_tool_schemas,
+        repetition_guard=args.repetition_guard,
     )
     print(
         json.dumps(
@@ -110,6 +116,7 @@ def main():
                 "checkpoint": engine.identity["model_id"],
                 "grammar": args.grammar,
                 "enforce_tool_schemas": args.enforce_tool_schemas,
+                "repetition_guard": args.repetition_guard,
                 "fast_sync": args.fast_sync,
                 "context_limit": args.context_limit,
                 "sampling": asdict(settings),
