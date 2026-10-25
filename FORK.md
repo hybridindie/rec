@@ -23,6 +23,7 @@ the fork and where each change stands.
 | `reasoning_effort` / `reasoning_budget` | `feat/reasoning-budget` | not yet proposed | Flint otherwise decides its own reasoning length (9–19k tokens per call); the grammar session forces `</think>` at the budget |
 | `REC_ENGINE_ARGS` passthrough | `feat/engine-args` | not yet proposed | `rec serve` hard-codes the engine's flags; we need `--metrics` (and others) |
 | `--repetition-guard` | `feat/repetition-guard` | not yet proposed | Flint with reasoning off can loop to the 32k token cap (~6 min); the guard ends exact repetition loops early (#6) |
+| `--metrics-prompt-ids` | `feat/metrics-prompt-ids` | not yet proposed | Logs prompt token ids (as deltas) so we can measure prompt-lookup speculative decoding before building it (#10) |
 
 ## Build
 

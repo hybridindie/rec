@@ -52,11 +52,8 @@ class DefaultsTests(unittest.TestCase):
                     main()
                     self.assertEqual(make.call_args.kwargs["grammar_mode"], grammar)
                     self.assertEqual(construct.call_args.kwargs["enforce_tool_schemas"], enforce)
-<<<<<<< HEAD
                     self.assertEqual(construct.call_args.kwargs["repetition_guard"], guard)
-=======
                     self.assertFalse(make.call_args.kwargs["metrics_prompt_ids"])
->>>>>>> feat/metrics-prompt-ids
                     ready = json.loads(stdout.getvalue().splitlines()[0])
                     self.assertEqual(ready["grammar"], grammar)
                     self.assertEqual(ready["fast_sync"], fast_sync)
