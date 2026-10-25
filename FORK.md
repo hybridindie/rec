@@ -24,6 +24,7 @@ the fork and where each change stands.
 | `REC_ENGINE_ARGS` passthrough | `feat/engine-args` | not yet proposed | `rec serve` hard-codes the engine's flags; we need `--metrics` (and others) |
 | `--repetition-guard` | `feat/repetition-guard` | not yet proposed | Flint with reasoning off can loop to the 32k token cap (~6 min); the guard ends exact repetition loops early (#6) |
 | `--metrics-prompt-ids` | `feat/metrics-prompt-ids` | not yet proposed | Logs prompt token ids (as deltas) so we can measure prompt-lookup speculative decoding before building it (#10) |
+| `--prompt-cache-slots` | `feat/prompt-cache-slots` | not yet proposed | Keeps several conversations cached (subagents, harness roles) so switching back doesn't reread the whole prompt; validated bitwise against cold prefill on Flint (#8) |
 
 ## Build
 

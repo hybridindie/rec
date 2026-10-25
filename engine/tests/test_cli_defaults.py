@@ -83,3 +83,29 @@ class PromptIdOptionTests(unittest.TestCase):
     def test_prompt_ids_without_metrics_is_an_error(self):
         with patch("sys.stderr", io.StringIO()), self.assertRaises(SystemExit):
             self.run_cli("--metrics-prompt-ids")
+
+
+class PromptCacheSlotsOptionTests(unittest.TestCase):
+    def construct(self, *options):
+        argv = ["rec-mlx", "serve", "flint", "--model-dir", ".", "--manifest", "m.json", *options]
+        engine = Mock(identity={"model_id": "flint"}, startup={})
+        with (
+            patch("sys.argv", argv),
+            patch("rec_mlx.cli.Engine", return_value=engine) as construct,
+            patch("rec_mlx.server.make_server", return_value=Mock(server_port=8080)),
+            patch("rec_mlx.cli.signal.signal"),
+            redirect_stdout(io.StringIO()) as stdout,
+        ):
+            main()
+        ready = json.loads(stdout.getvalue().splitlines()[0])
+        return construct.call_args.kwargs["prompt_cache_slots"], ready["prompt_cache_slots"]
+
+    def test_default_is_one_conversation(self):
+        self.assertEqual(self.construct(), (1, 1))
+
+    def test_slots_reach_the_engine(self):
+        self.assertEqual(self.construct("--prompt-cache-slots", "3"), (3, 3))
+
+    def test_zero_slots_is_an_error(self):
+        with patch("sys.stderr", io.StringIO()), self.assertRaises(SystemExit):
+            self.construct("--prompt-cache-slots", "0")

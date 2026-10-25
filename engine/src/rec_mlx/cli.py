@@ -52,6 +52,12 @@ def main():
         help="end a generation that is repeating the same tokens exactly (reported as length)",
     )
     parser.add_argument(
+        "--prompt-cache-slots",
+        type=int,
+        default=1,
+        help="conversations to keep prefilled; each costs ~2-4 GiB (default: %(default)s)",
+    )
+    parser.add_argument(
         "--api-key-file", type=Path, help="file with the bearer token that requests must present"
     )
     parser.add_argument(
@@ -104,6 +110,8 @@ def main():
         parser.error(str(error))
     if args.metrics_prompt_ids and args.metrics is None:
         parser.error("--metrics-prompt-ids requires --metrics")
+    if args.prompt_cache_slots < 1:
+        parser.error("--prompt-cache-slots must be at least 1")
     api_key = None
     if args.api_key_file is not None:
         api_key = args.api_key_file.read_text().strip()
@@ -115,6 +123,7 @@ def main():
         context_limit=args.context_limit,
         enforce_tool_schemas=args.enforce_tool_schemas,
         repetition_guard=args.repetition_guard,
+        prompt_cache_slots=args.prompt_cache_slots,
     )
     print(
         json.dumps(
@@ -124,6 +133,7 @@ def main():
                 "grammar": args.grammar,
                 "enforce_tool_schemas": args.enforce_tool_schemas,
                 "repetition_guard": args.repetition_guard,
+                "prompt_cache_slots": args.prompt_cache_slots,
                 "fast_sync": args.fast_sync,
                 "context_limit": args.context_limit,
                 "sampling": asdict(settings),
