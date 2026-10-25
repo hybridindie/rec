@@ -10,11 +10,12 @@ from rec_mlx.cli import main
 
 class DefaultsTests(unittest.TestCase):
     def test_flint_grammar_and_fast_sync_defaults_and_opt_outs(self):
-        for options, fast_sync, grammar, enforce in (
-            ([], True, "flint", False),
-            (["--no-fast-sync"], False, "flint", False),
-            (["--grammar", "none"], True, "none", False),
-            (["--enforce-tool-schemas"], True, "flint", True),
+        for options, fast_sync, grammar, enforce, guard in (
+            ([], True, "flint", False, False),
+            (["--no-fast-sync"], False, "flint", False, False),
+            (["--grammar", "none"], True, "none", False, False),
+            (["--enforce-tool-schemas"], True, "flint", True, False),
+            (["--repetition-guard"], True, "flint", False, True),
         ):
             with self.subTest(options=options):
                 engine = Mock(identity={"model_id": "flint"}, startup={"chat_template": "flint"})
@@ -51,8 +52,10 @@ class DefaultsTests(unittest.TestCase):
                     main()
                     self.assertEqual(make.call_args.kwargs["grammar_mode"], grammar)
                     self.assertEqual(construct.call_args.kwargs["enforce_tool_schemas"], enforce)
+                    self.assertEqual(construct.call_args.kwargs["repetition_guard"], guard)
                     ready = json.loads(stdout.getvalue().splitlines()[0])
                     self.assertEqual(ready["grammar"], grammar)
                     self.assertEqual(ready["fast_sync"], fast_sync)
                     self.assertEqual(ready["enforce_tool_schemas"], enforce)
+                    self.assertEqual(ready["repetition_guard"], guard)
                     self.assertEqual(ready["chat_template"], "flint")
