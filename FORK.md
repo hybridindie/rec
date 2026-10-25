@@ -22,6 +22,7 @@ the fork and where each change stands.
 | Keep 64 prefix checkpoints instead of 2 | `upstream-pr/24` | open: recursive-oss/rec#24 | Agent harnesses send long shared preambles; 2 checkpoints reuse none of them |
 | `reasoning_effort` / `reasoning_budget` | `feat/reasoning-budget` | not yet proposed | Flint otherwise decides its own reasoning length (9–19k tokens per call); the grammar session forces `</think>` at the budget |
 | `REC_ENGINE_ARGS` passthrough | `feat/engine-args` | not yet proposed | `rec serve` hard-codes the engine's flags; we need `--metrics` (and others) |
+| `--repetition-guard` | `feat/repetition-guard` | not yet proposed | Flint with reasoning off can loop to the 32k token cap (~6 min); the guard ends exact repetition loops early (#6) |
 
 ## Build
 
