@@ -51,8 +51,32 @@ class DefaultsTests(unittest.TestCase):
                     main()
                     self.assertEqual(make.call_args.kwargs["grammar_mode"], grammar)
                     self.assertEqual(construct.call_args.kwargs["enforce_tool_schemas"], enforce)
+                    self.assertFalse(make.call_args.kwargs["metrics_prompt_ids"])
                     ready = json.loads(stdout.getvalue().splitlines()[0])
                     self.assertEqual(ready["grammar"], grammar)
                     self.assertEqual(ready["fast_sync"], fast_sync)
                     self.assertEqual(ready["enforce_tool_schemas"], enforce)
                     self.assertEqual(ready["chat_template"], "flint")
+
+
+class PromptIdOptionTests(unittest.TestCase):
+    def run_cli(self, *options):
+        argv = ["rec-mlx", "serve", "flint", "--model-dir", ".", "--manifest", "m.json", *options]
+        engine = Mock(identity={"model_id": "flint"}, startup={})
+        with (
+            patch("sys.argv", argv),
+            patch("rec_mlx.cli.Engine", return_value=engine),
+            patch("rec_mlx.server.make_server", return_value=Mock(server_port=8080)) as make,
+            patch("rec_mlx.cli.signal.signal"),
+            redirect_stdout(io.StringIO()),
+        ):
+            main()
+        return make.call_args.kwargs
+
+    def test_prompt_ids_reach_the_server(self):
+        kwargs = self.run_cli("--metrics", "m.jsonl", "--metrics-prompt-ids")
+        self.assertTrue(kwargs["metrics_prompt_ids"])
+
+    def test_prompt_ids_without_metrics_is_an_error(self):
+        with patch("sys.stderr", io.StringIO()), self.assertRaises(SystemExit):
+            self.run_cli("--metrics-prompt-ids")
