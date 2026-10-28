@@ -16,12 +16,14 @@ the fork and where each change stands.
 
 ## What's in `godot`
 
-Based on upstream v0.1.1. Our M4 Max profile (`upstream-pr/17`) was dropped: upstream closed
-the PR and shipped its own M4 Max kernels in v0.1.1.
+Based on upstream v0.1.1, which ships its own M4 Max kernels (upstream closed our
+recursive-oss/rec#17). `upstream-pr/17` is retired; `feat/m4-max-workers` re-applies only our
+worker counts on top of upstream's kernels.
 
 | Change | Branch | Upstream status | Why we need it |
 |---|---|---|---|
 | Keep 64 prefix checkpoints instead of 2 | `upstream-pr/24` | open: recursive-oss/rec#24 | Agent harnesses send long shared preambles; 2 checkpoints reuse none of them |
+| M4 Max 76/64/64 worker profile | `feat/m4-max-workers` | not yet proposed | Upstream v0.1.1 runs M4 Max on the default 36/32/32 pool; ours decodes ~9% faster (214 vs 196 tok/s median, 6 runs each, A/B interleaved; prefill unchanged at ~1,490 tok/s on 8.6k-token prompts) |
 | `reasoning_effort` / `reasoning_budget` | `feat/reasoning-budget` | not yet proposed | Flint otherwise decides its own reasoning length (9–19k tokens per call); the grammar session forces `</think>` at the budget |
 | `REC_ENGINE_ARGS` passthrough | `feat/engine-args` | not yet proposed | `rec serve` hard-codes the engine's flags; we need `--metrics` (and others) |
 | `--repetition-guard` | `feat/repetition-guard` | not yet proposed | Flint with reasoning off can loop to the 32k token cap (~6 min); the guard ends exact repetition loops early (#6) |
