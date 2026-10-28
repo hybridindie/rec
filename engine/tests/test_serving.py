@@ -10,7 +10,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
-from rec_mlx.server import make_server
+from rec_mlx.server import make_server, merge_reasoning_fields
 
 
 class Tokenizer:
@@ -513,6 +513,22 @@ class ServingTest(unittest.TestCase):
             server.generator.join()
             server.server_close()
             thread.join()
+
+
+class ReasoningFieldTest(unittest.TestCase):
+    def test_reasoning_alias_becomes_reasoning_content(self):
+        messages = [{"role": "assistant", "reasoning": "why", "content": "answer"}]
+        merge_reasoning_fields(messages)
+        self.assertEqual(messages, [{"role": "assistant", "reasoning_content": "why", "content": "answer"}])
+
+    def test_identical_reasoning_fields_are_accepted(self):
+        messages = [{"role": "assistant", "reasoning": "why", "reasoning_content": "why"}]
+        merge_reasoning_fields(messages)
+        self.assertEqual(messages, [{"role": "assistant", "reasoning_content": "why"}])
+
+    def test_conflicting_reasoning_fields_fail(self):
+        with self.assertRaisesRegex(ValueError, "one reasoning field"):
+            merge_reasoning_fields([{"role": "assistant", "reasoning": "a", "reasoning_content": "b"}])
 
 
 if __name__ == "__main__":

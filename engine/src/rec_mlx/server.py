@@ -41,6 +41,19 @@ class RequestError(ValueError):
     pass
 
 
+def merge_reasoning_fields(messages):
+    """Fold each message's `reasoning` alias into `reasoning_content`, in place.
+
+    Clients that target several local servers send both fields with the same text
+    (vLLM and Ollama read `reasoning`, llama.cpp reads `reasoning_content`); only
+    differing values are ambiguous."""
+    for message in messages:
+        if "reasoning" in message:
+            reasoning = message.pop("reasoning")
+            if message.setdefault("reasoning_content", reasoning) != reasoning:
+                raise ValueError("Use one reasoning field per message")
+
+
 def make_server(
     engine,
     address,
@@ -310,11 +323,7 @@ def make_server(
             from .engine import ContextLimitError
 
             try:
-                for message in request.messages:
-                    if "reasoning" in message:
-                        if "reasoning_content" in message:
-                            raise ValueError("Use one reasoning field per message")
-                        message["reasoning_content"] = message.pop("reasoning")
+                merge_reasoning_fields(request.messages)
                 process_message_content(request.messages)
                 mode = self.body["grammar"] if "grammar" in self.body else grammar_mode
                 request.constraint = None
