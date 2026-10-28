@@ -38,7 +38,7 @@ uv python install 3.12.12
 "$python_root/bin/python3.12" packaging/build-mlx-runtime.py --python-root "$python_root" \
   --output .build/bundle-mlx-$(git rev-parse --short HEAD)   # must be a new directory
 python3 packaging/package.py --runtime-dir .build/bundle-mlx-$(git rev-parse --short HEAD) \
-  --manifest packaging/flint-int4-mlx.json --version 0.1.0-godot.$(git rev-parse --short HEAD) \
+  --manifest packaging/flint-int4-mlx.json --version 0.1.1-godot.$(git rev-parse --short HEAD) \
   --output dist/rec
 dist/rec doctor
 ```
