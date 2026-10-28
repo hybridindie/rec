@@ -44,6 +44,21 @@ dist/rec doctor
 `build-mlx-runtime.py` refuses an existing output directory. If you rerun `package.py`
 against an old bundle, the binary ships the **old** engine.
 
+## Install
+
+Install a build the way `install.sh` does, so `rec uninstall` recognises it: an immutable
+release directory with a `.managed` hash, and `~/.local/bin/rec` linking to it.
+
+```bash
+v=$(dist/rec --version | awk '{print $2}'); r=~/.local/share/rec/releases/$v
+mkdir "$r" && cp dist/rec "$r/rec" && shasum -a 256 "$r/rec" | awk '{print $1}' > "$r/.managed"
+ln -sfn "$r/rec" ~/.local/bin/rec
+launchctl kickstart -k gui/$(id -u)/com.hybridindie.rec-flint   # restart the Flint service
+```
+
+Never run `rec update`: it runs the upstream installer and relinks `rec` to a stock release,
+dropping every patch above.
+
 ## Notes
 
 - `tests/test_serving.py::test_queue_capacity_rejects_excess_and_preserves_admitted_requests`
