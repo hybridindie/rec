@@ -6,6 +6,7 @@ import mlx.core as mx
 
 from rec_mlx.cache import FixedKVCache, FixedSlidingKVCache, KVStorage
 from rec_mlx.engine import Engine
+from rec_mlx.m4_max import KVStorage as M4MaxKVStorage
 from rec_mlx.prefix import Checkpoint, PromptCache, clone_prefix, usable_prefix
 
 
@@ -116,7 +117,15 @@ def metadata(global_rows):
 @unittest.skipUnless(mx.metal.is_available(), "requires Apple Metal")
 class ClonePrefixTests(unittest.TestCase):
     def test_clone_copies_the_head_into_independent_storage(self):
-        storage = KVStorage(metadata({0}), 16)
+        self.check_clone(KVStorage(metadata({0}), 16))
+
+    def test_clone_keeps_m4_max_storage_and_its_block_size(self):
+        storage = M4MaxKVStorage(metadata({0}), 16, block_tokens=16)
+        clone = self.check_clone(storage)
+        self.assertIsInstance(clone.storage, M4MaxKVStorage)
+        self.assertEqual(clone.storage.block_tokens, 16)
+
+    def check_clone(self, storage):
         layers = [
             FixedKVCache(storage, 0),
             FixedSlidingKVCache(
@@ -149,6 +158,7 @@ class ClonePrefixTests(unittest.TestCase):
         storage.write(0, 0, mx.zeros_like(keys[..., :6, :]), mx.zeros_like(values[..., :6, :]))
         self.assertTrue(mx.array_equal(clone.storage.layer(0, 6)[0:1], keys[..., :6, :]).item())
         self.assertEqual(prefix.tokens, list(range(10)))
+        return clone
 
 
 class SlotsMetricsTests(unittest.TestCase):
