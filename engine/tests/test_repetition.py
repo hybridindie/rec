@@ -78,7 +78,10 @@ class DecodeLoopTests(unittest.TestCase):
             return [loop[(start + i) % len(loop)] for i in range(count)]
 
         engine.runtime = SimpleNamespace(
-            make_session=lambda **kw: Session(), metadata=[], prefill_chunk_size=10**9
+            make_session=lambda **kw: Session(),
+            metadata=[],
+            prefill_chunk_size=10**9,
+            device_profile=SimpleNamespace(chip="M4 Pro"),
         )
         engine.resident_sampler = SimpleNamespace(block=block)
         return engine
