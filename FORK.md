@@ -25,6 +25,7 @@ the fork and where each change stands.
 | `--repetition-guard` | `feat/repetition-guard` | not yet proposed | Flint with reasoning off can loop to the 32k token cap (~6 min); the guard ends exact repetition loops early (#6) |
 | `--metrics-prompt-ids` | `feat/metrics-prompt-ids` | not yet proposed | Logs prompt token ids (as deltas) so we can measure prompt-lookup speculative decoding before building it (#10) |
 | `--prompt-cache-slots` | `feat/prompt-cache-slots` | not yet proposed | Keeps several conversations cached (subagents, harness roles) so switching back doesn't reread the whole prompt; validated bitwise against cold prefill on Flint (#8) |
+| Accept identical `reasoning` + `reasoning_content` | `feat/reasoning-field-alias` | not yet proposed | Hermes Agent replays reasoning under both fields to local servers; stock rec rejects every turn after the first |
 
 ## Build
 
@@ -36,8 +37,8 @@ uv python install 3.12.12
   --output .build/bundle-mlx-$(git rev-parse --short HEAD)   # must be a new directory
 python3 packaging/package.py --runtime-dir .build/bundle-mlx-$(git rev-parse --short HEAD) \
   --manifest packaging/flint-int4-mlx.json --version 0.1.0-godot.$(git rev-parse --short HEAD) \
-  --output dist/rec-godot
-dist/rec-godot doctor
+  --output dist/rec
+dist/rec doctor
 ```
 
 `build-mlx-runtime.py` refuses an existing output directory. If you rerun `package.py`
