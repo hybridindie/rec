@@ -139,6 +139,15 @@ def usable_prefix(prefix, tokens):
     )
 
 
+def empty_storage_like(storage, capacity):
+    """New storage of the same kind as storage. M4 Max storage also carries its block size,
+    which its prefill reads; a plain KVStorage there fails on the first restored slot."""
+    block_tokens = getattr(storage, "block_tokens", None)
+    if block_tokens is None:
+        return KVStorage(storage.rows, capacity)
+    return type(storage)(storage.rows, capacity, block_tokens=block_tokens)
+
+
 def clone_prefix(prefix, position):
     """The first position tokens of prefix in new storage, leaving prefix untouched.
 
@@ -161,7 +170,7 @@ def clone_prefix(prefix, position):
     else:
         checkpoint = next(item for item in prefix.checkpoints if item.position == position)
         sliding, logits = checkpoint.sliding, checkpoint.logits
-    storage = KVStorage(prefix.storage.rows, position)
+    storage = empty_storage_like(prefix.storage, position)
     rings = iter(sliding)
     layers = []
     for layer in prefix.layers:
