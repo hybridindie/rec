@@ -8,6 +8,13 @@ from unittest.mock import Mock, patch
 from rec_mlx.cli import main
 
 
+def fake_server():
+    """A server that serves and stops cleanly: its generation worker never failed."""
+    server = Mock(server_port=8080)
+    server.generator.worker_error = None
+    return server
+
+
 class DefaultsTests(unittest.TestCase):
     def test_flint_grammar_and_fast_sync_defaults_and_opt_outs(self):
         for options, fast_sync, grammar, enforce in (
@@ -18,7 +25,7 @@ class DefaultsTests(unittest.TestCase):
         ):
             with self.subTest(options=options):
                 engine = Mock(identity={"model_id": "flint"}, startup={"chat_template": "flint"})
-                server = Mock(server_port=8080)
+                server = fake_server()
                 with (
                     patch(
                         "sys.argv",
