@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import signal
+import sys
 import threading
 from dataclasses import asdict
 from pathlib import Path
@@ -160,8 +161,16 @@ def main():
             server.generator.cancel()
             threading.Thread(target=server.shutdown, daemon=True).start()
 
+        def worker_failed():
+            # A dead worker answers 503 to every request while the process stays up; exit
+            # instead, so the supervisor (rec serve, launchd) restarts the engine.
+            threading.Thread(target=server.shutdown, daemon=True).start()
+
         signal.signal(signal.SIGTERM, stop)
         signal.signal(signal.SIGINT, stop)
+        server.generator.on_worker_failure = worker_failed
+        if server.generator.worker_error is not None:
+            worker_failed()
         try:
             server.serve_forever()
         except KeyboardInterrupt:
@@ -170,6 +179,9 @@ def main():
             server.generator.cancel()
             server.generator.join()
             server.server_close()
+        if server.generator.worker_error is not None:
+            print(f"The generation worker failed: {server.generator.worker_error}", file=sys.stderr, flush=True)
+            sys.exit(1)
         return
     chat(engine, settings, args.metrics, grammar_mode=args.grammar)
 
