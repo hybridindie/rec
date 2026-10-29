@@ -76,7 +76,7 @@ class PromptIdOptionTests(unittest.TestCase):
         with (
             patch("sys.argv", argv),
             patch("rec_mlx.cli.Engine", return_value=engine),
-            patch("rec_mlx.server.make_server", return_value=Mock(server_port=8080)) as make,
+            patch("rec_mlx.server.make_server", return_value=fake_server()) as make,
             patch("rec_mlx.cli.signal.signal"),
             redirect_stdout(io.StringIO()),
         ):
@@ -99,7 +99,7 @@ class PromptCacheSlotsOptionTests(unittest.TestCase):
         with (
             patch("sys.argv", argv),
             patch("rec_mlx.cli.Engine", return_value=engine) as construct,
-            patch("rec_mlx.server.make_server", return_value=Mock(server_port=8080)),
+            patch("rec_mlx.server.make_server", return_value=fake_server()),
             patch("rec_mlx.cli.signal.signal"),
             redirect_stdout(io.StringIO()) as stdout,
         ):
