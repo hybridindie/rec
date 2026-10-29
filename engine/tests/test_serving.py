@@ -286,6 +286,28 @@ class ServingTest(unittest.TestCase):
             conn.close()
         self.assertEqual(self.request("C")[0], 503)
 
+    def test_worker_failure_is_recorded_and_reported_once(self):
+        failed = Mock()
+        self.server.generator.on_worker_failure = failed
+        first = self.pool.submit(self.request, "A", max_tokens=2)
+        self.assertTrue(self.engine.started.wait(3))
+        self.engine.failure = RuntimeError("GPU synchronization failure")
+        with patch.object(threading, "excepthook"):
+            self.engine.release.set()
+            self.server.generator.join()
+        with self.assertRaises(http.client.RemoteDisconnected):
+            first.result()
+        self.assertIs(self.server.generator.worker_error, self.engine.failure)
+        failed.assert_called_once_with()
+
+    def test_requested_stop_is_not_a_worker_failure(self):
+        failed = Mock()
+        self.server.generator.on_worker_failure = failed
+        self.server.generator.cancel()
+        self.server.generator.join()
+        self.assertIsNone(self.server.generator.worker_error)
+        failed.assert_not_called()
+
     def test_listen_backlog_holds_a_burst_of_connections(self):
         # Connections beyond the backlog are reset (macOS) or dropped (Linux) before a handler runs.
         self.server.shutdown()
